@@ -142,8 +142,143 @@ function debounce(func, wait) {
   };
 }
 
-// Translation cache
-const translationCache = new Map();
+// Translation cache and helper functions
+class SmartTranslationCache {
+  constructor() {
+    this.cache = new Map();
+    this.phraseCache = new Map();
+  }
+
+  // 规范化文本，移除多余空格，转换为小写
+  normalizeText(text) {
+    return text.trim()
+      .toLowerCase()
+      .replace(/\s+/g, ' ');
+  }
+
+  // 清理文本，移除标点符号
+  cleanText(text) {
+    return text.replace(/[.,!?;:'"()\[\]{}\/\\\-_+=<>@#$%^&*]/g, '')
+      .trim()
+      .toLowerCase();
+  }
+
+  // 将文本分割成短语和句子
+  splitText(text) {
+    // 首先按句子分割
+    const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+    
+    // 然后将每个句子分割成短语（3-6个单词的组合）
+    const phrases = [];
+    sentences.forEach(sentence => {
+      const words = sentence.trim().split(/\s+/);
+      for (let i = 0; i < words.length; i++) {
+        for (let len = 3; len <= 6 && i + len <= words.length; len++) {
+          const phrase = words.slice(i, i + len).join(' ');
+          if (phrase.length > 10) { // 只缓存长度超过10个字符的短语
+            phrases.push(phrase);
+          }
+        }
+      }
+    });
+    
+    return {
+      sentences,
+      phrases: [...new Set(phrases)] // 去重
+    };
+  }
+
+  // 检查文本是否已被完整缓存
+  hasExactMatch(text) {
+    const normalized = this.normalizeText(text);
+    return this.cache.has(normalized);
+  }
+
+  // 获取完整缓存的翻译
+  getExactMatch(text) {
+    const normalized = this.normalizeText(text);
+    return this.cache.get(normalized);
+  }
+
+  // 检查文本中可复用的部分
+  findReusableContent(text) {
+    const { sentences, phrases } = this.splitText(text);
+    const reusable = new Map();
+    let totalLength = 0;
+    
+    // 检查完整句子
+    sentences.forEach(sentence => {
+      const normalized = this.normalizeText(sentence);
+      const cached = this.cache.get(normalized);
+      if (cached) {
+        reusable.set(normalized, cached);
+        totalLength += sentence.length;
+      }
+    });
+
+    // 如果句子没有完全覆盖，检查短语
+    if (totalLength < text.length * 0.8) { // 如果句子覆盖率低于80%
+      phrases.forEach(phrase => {
+        const normalized = this.normalizeText(phrase);
+        const cached = this.phraseCache.get(normalized);
+        if (cached) {
+          reusable.set(normalized, cached);
+        }
+      });
+    }
+
+    return {
+      reusable,
+      isFullyCovered: totalLength >= text.length * 0.8 // 如果覆盖率达到80%以上，认为已完全覆盖
+    };
+  }
+
+  // 缓存翻译结果
+  cacheTranslation(text, translation) {
+    const normalized = this.normalizeText(text);
+    this.cache.set(normalized, translation);
+
+    // 如果文本包含多个句子，也缓存单个句子和短语
+    const { sentences, phrases } = this.splitText(text);
+    const translatedParts = this.splitText(translation);
+
+    if (sentences.length === translatedParts.sentences.length) {
+      sentences.forEach((sentence, index) => {
+        const normalizedSentence = this.normalizeText(sentence);
+        this.cache.set(normalizedSentence, translatedParts.sentences[index]);
+      });
+
+      // 缓存短语（仅当句子数量匹配时）
+      phrases.forEach(phrase => {
+        const normalizedPhrase = this.normalizeText(phrase);
+        // 在翻译结果中查找对应的中文
+        const chinesePhrase = this.findChinesePhrase(phrase, text, translation);
+        if (chinesePhrase) {
+          this.phraseCache.set(normalizedPhrase, chinesePhrase);
+        }
+      });
+    }
+  }
+
+  // 在翻译结果中查找对应的中文短语
+  findChinesePhrase(englishPhrase, originalText, translation) {
+    const index = originalText.toLowerCase().indexOf(englishPhrase.toLowerCase());
+    if (index === -1) return null;
+
+    // 根据位置比例在翻译中查找对应部分
+    const ratio = index / originalText.length;
+    const estimatedPos = Math.floor(translation.length * ratio);
+    const windowSize = Math.floor(englishPhrase.length * 1.5); // 考虑中文通常比英文短
+
+    return translation.substr(
+      Math.max(0, estimatedPos - windowSize / 2),
+      windowSize
+    );
+  }
+}
+
+// Initialize cache
+const translationCache = new SmartTranslationCache();
 
 // Initialize popup
 const popup = new TranslationPopup();
@@ -181,15 +316,29 @@ document.addEventListener('mouseup', debounce(async (e) => {
     popup.showLoading();
     popup.show(x, y);
 
-    // Check cache first
-    const cachedTranslation = translationCache.get(selectedText);
-    if (cachedTranslation) {
-      popup.setContent(`<div class="translation-content">${cachedTranslation}</div>`);
-      return;
-    }
-
     try {
-      // 发送消息到background script
+      // 检查是否有完整匹配的缓存
+      if (translationCache.hasExactMatch(selectedText)) {
+        const cachedTranslation = translationCache.getExactMatch(selectedText);
+        popup.setContent(`<div class="translation-content">${cachedTranslation}</div>`);
+        return;
+      }
+
+      // 检查是否有可复用的部分
+      const { reusable, isFullyCovered } = translationCache.findReusableContent(selectedText);
+      
+      if (reusable.size > 0) {
+        // 显示缓存的翻译结果
+        const partialTranslation = Array.from(reusable.values()).join(' ');
+        popup.setContent(`<div class="translation-content">${partialTranslation}</div>`);
+        
+        // 如果内容已被完全覆盖，不需要调用API
+        if (isFullyCovered) {
+          return;
+        }
+      }
+
+      // 只有在内容未被完全覆盖时才调用API
       chrome.runtime.sendMessage(
         { action: 'translate', text: selectedText },
         function(response) {
@@ -200,9 +349,9 @@ document.addEventListener('mouseup', debounce(async (e) => {
           }
 
           if (response && response.success && response.translation) {
-            // Cache the translation
-            translationCache.set(selectedText, response.translation);
-            // 显示翻译结果
+            // 缓存新的翻译结果
+            translationCache.cacheTranslation(selectedText, response.translation);
+            // 显示完整翻译
             popup.setContent(`<div class="translation-content">${response.translation}</div>`);
           } else {
             const errorMessage = response?.error || '翻译失败，请重试';
@@ -215,7 +364,6 @@ document.addEventListener('mouseup', debounce(async (e) => {
       popup.setContent(`<div class="translation-content">翻译出错，请检查扩展设置</div>`);
     }
   } else if (popup.popup.style.display === 'block') {
-    // 如果选中的文本不是英文，且弹窗正在显示，则检查点击是否在弹窗外
     const isClickInside = e.composedPath().some(element => {
       return element === popup.popup || element === popup.content;
     });
