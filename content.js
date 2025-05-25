@@ -145,12 +145,94 @@ class TranslationPopup {
     this.content = null;
     this.progressBar = null;
     this.statsDiv = null;
+    // 先使用系统主题作为默认值
     this.isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    // 异步加载存储的主题设置
+    this.loadThemePreference().then(() => {
+      if (this.popup) {
+        this.popup.classList.toggle('dark-mode', this.isDarkMode);
+      }
+    });
     this.init();
     this.setupEventListeners();
   }
 
-  init() {
+  async loadThemePreference() {
+    try {
+      const result = await new Promise(resolve => {
+        chrome.storage.local.get('translatorTheme', resolve);
+      });
+      
+      if (result.translatorTheme === undefined) {
+        // 如果没有存储的偏好，保持使用系统主题
+        return;
+      }
+      this.isDarkMode = result.translatorTheme === 'dark';
+    } catch (error) {
+      console.warn('Failed to load theme preference:', error);
+      // 如果出错，保持使用系统主题
+    }
+  }
+
+  async saveThemePreference() {
+    try {
+      await new Promise(resolve => {
+        chrome.storage.local.set({
+          translatorTheme: this.isDarkMode ? 'dark' : 'light'
+        }, resolve);
+      });
+    } catch (error) {
+      console.warn('Failed to save theme preference:', error);
+    }
+  }
+
+  toggleTheme() {
+    this.isDarkMode = !this.isDarkMode;
+    this.popup.classList.toggle('dark-mode', this.isDarkMode);
+    this.saveThemePreference();
+  }
+
+  setupEventListeners() {
+    // 监听系统主题变化
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', async (e) => {
+      // 检查是否有存储的主题偏好
+      try {
+        const result = await new Promise(resolve => {
+          chrome.storage.local.get('translatorTheme', resolve);
+        });
+        // 只有当没有存储的主题偏好时，才跟随系统主题
+        if (result.translatorTheme === undefined) {
+          this.isDarkMode = e.matches;
+          this.popup.classList.toggle('dark-mode', this.isDarkMode);
+        }
+      } catch (error) {
+        // 如果获取存储失败，跟随系统主题
+        this.isDarkMode = e.matches;
+        this.popup.classList.toggle('dark-mode', this.isDarkMode);
+      }
+    });
+
+    // Close on Escape
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && this.popup.style.display !== 'none') {
+        this.hide();
+      }
+    });
+
+    // Handle resize
+    window.addEventListener('resize', debounce(() => {
+      if (this.popup.style.display !== 'none') {
+        this.updateMaxHeight();
+      }
+    }, 100));
+
+    // 防止点击弹窗内部时触发选择文本事件
+    this.popup.addEventListener('mouseup', (e) => {
+      e.stopPropagation();
+    });
+  }
+
+  async init() {
     const container = document.createElement('div');
     container.id = 'quick-translator-container';
     container.style.position = 'fixed';
@@ -166,6 +248,8 @@ class TranslationPopup {
     this.popup = document.createElement('div');
     this.popup.className = 'translation-popup';
     this.popup.style.pointerEvents = 'auto';
+    
+    // 根据存储的主题设置初始状态
     this.popup.classList.toggle('dark-mode', this.isDarkMode);
 
     // 创建固定的头部容器
@@ -546,38 +630,6 @@ class TranslationPopup {
     document.body.appendChild(container);
   }
 
-  toggleTheme() {
-    this.isDarkMode = !this.isDarkMode;
-    this.popup.classList.toggle('dark-mode', this.isDarkMode);
-  }
-
-  setupEventListeners() {
-    // 监听系统主题变化
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
-      this.isDarkMode = e.matches;
-      this.popup.classList.toggle('dark-mode', this.isDarkMode);
-    });
-
-    // Close on Escape
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && this.popup.style.display !== 'none') {
-        this.hide();
-      }
-    });
-
-    // Handle resize
-    window.addEventListener('resize', debounce(() => {
-      if (this.popup.style.display !== 'none') {
-        this.updateMaxHeight();
-      }
-    }, 100));
-
-    // 防止点击弹窗内部时触发选择文本事件
-    this.popup.addEventListener('mouseup', (e) => {
-      e.stopPropagation();
-    });
-  }
-
   updateMaxHeight() {
     const windowHeight = window.innerHeight;
     const maxHeight = Math.floor(windowHeight * 0.8);
@@ -847,23 +899,39 @@ class TranslationProcessor {
   sendTranslationRequest(segments) {
     const text = segments.join('\n');
     
-    return new Promise((resolve) => {
-      chrome.runtime.sendMessage(
-        { 
-          action: 'translate', 
-          text: text
-        },
-        (response) => {
-          if (chrome.runtime.lastError) {
-            resolve({ 
-              success: false, 
-              error: chrome.runtime.lastError.message 
-            });
-            return;
+    return new Promise((resolve, reject) => {
+      try {
+        chrome.runtime.sendMessage(
+          { 
+            action: 'translate', 
+            text: text
+          },
+          (response) => {
+            if (chrome.runtime.lastError) {
+              // 检查是否是扩展上下文失效的错误
+              if (chrome.runtime.lastError.message.includes('Extension context invalidated')) {
+                // 通知用户需要刷新页面
+                resolve({ 
+                  success: false, 
+                  error: '扩展已更新，请刷新页面以继续使用。'
+                });
+              } else {
+                resolve({ 
+                  success: false, 
+                  error: chrome.runtime.lastError.message 
+                });
+              }
+              return;
+            }
+            resolve(response);
           }
-          resolve(response);
-        }
-      );
+        );
+      } catch (error) {
+        resolve({ 
+          success: false, 
+          error: '连接到扩展失败，请刷新页面重试。'
+        });
+      }
     });
   }
 
