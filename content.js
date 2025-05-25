@@ -247,7 +247,6 @@ class TranslationPopup {
         position: fixed;
         top: 20px;
         right: 20px;
-        background: white;
         border-radius: 12px;
         box-shadow: 0 4px 20px rgba(0,0,0,0.15);
         width: 600px;
@@ -260,148 +259,79 @@ class TranslationPopup {
         display: none;
         flex-direction: column;
         overflow: hidden;
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.98) 100%);
+        backdrop-filter: blur(20px) saturate(180%);
+        -webkit-backdrop-filter: blur(20px) saturate(180%);
+        border: 1px solid rgba(255, 255, 255, 0.3);
       }
 
-      .translation-popup.visible {
-        opacity: 1;
-      }
-
-      .dark-mode {
-        background: #1a1a1a;
-        color: #fff;
-      }
-
-      .header-container {
-        position: sticky;
+      .translation-popup::before {
+        content: '';
+        position: absolute;
         top: 0;
-        background: inherit;
-        border-radius: 12px 12px 0 0;
-        z-index: 2;
-        padding: 16px 20px;
-        flex-shrink: 0;
-        border-bottom: 1px solid #ecf0f1;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: 
+          radial-gradient(circle at 0% 0%, rgba(255, 182, 193, 0.1) 0%, transparent 50%),
+          radial-gradient(circle at 100% 0%, rgba(173, 216, 230, 0.15) 0%, transparent 50%),
+          radial-gradient(circle at 100% 100%, rgba(152, 251, 152, 0.1) 0%, transparent 50%),
+          radial-gradient(circle at 0% 100%, rgba(255, 218, 185, 0.1) 0%, transparent 50%);
+        z-index: -1;
+        border-radius: 12px;
+        opacity: 0.8;
       }
 
-      .dark-mode .header-container {
-        border-bottom-color: #333;
+      .dark-mode.translation-popup {
+        background: linear-gradient(135deg, rgba(26, 26, 26, 0.95) 0%, rgba(26, 26, 26, 0.98) 100%);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
       }
 
-      .popup-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-      }
-
-      .popup-title {
-        font-size: 16px;
-        font-weight: 600;
-        color: #2c3e50;
-      }
-
-      .dark-mode .popup-title {
-        color: #fff;
-      }
-
-      .button-group {
-        display: flex;
-        gap: 8px;
-      }
-
-      .theme-button,
-      .close-button {
-        background: transparent;
-        border: none;
-        padding: 8px;
-        cursor: pointer;
-        color: #666;
-        border-radius: 6px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: all 0.2s ease;
-      }
-
-      .dark-mode .theme-button,
-      .dark-mode .close-button {
-        color: #999;
-      }
-
-      .theme-button:hover,
-      .close-button:hover {
-        background: #f5f5f5;
-        color: #333;
-      }
-
-      .dark-mode .theme-button:hover,
-      .dark-mode .close-button:hover {
-        background: #333;
-        color: #fff;
-      }
-
-      .theme-button:active,
-      .close-button:active {
-        background: #ebebeb;
-      }
-
-      .dark-mode .theme-button:active,
-      .dark-mode .close-button:active {
-        background: #404040;
-      }
-
-      .theme-button .light-icon {
-        display: none;
-      }
-
-      .theme-button .dark-icon {
-        display: block;
-      }
-
-      .dark-mode .theme-button .light-icon {
-        display: block;
-      }
-
-      .dark-mode .theme-button .dark-icon {
-        display: none;
-      }
-
-      .scroll-container {
-        padding: 20px 20px 0 20px;
-        overflow-y: auto;
-        flex: 1;
-        min-height: 0;
-        position: relative;
-        scrollbar-width: thin;
-        scrollbar-color: rgba(155, 155, 155, 0.3) transparent;
-      }
-
-      .translation-content {
-        padding-bottom: 40px;
+      .dark-mode.translation-popup::before {
+        background: 
+          radial-gradient(circle at 0% 0%, rgba(138, 43, 226, 0.1) 0%, transparent 50%),
+          radial-gradient(circle at 100% 0%, rgba(0, 191, 255, 0.1) 0%, transparent 50%),
+          radial-gradient(circle at 100% 100%, rgba(50, 205, 50, 0.1) 0%, transparent 50%),
+          radial-gradient(circle at 0% 100%, rgba(255, 140, 0, 0.1) 0%, transparent 50%);
+        opacity: 0.4;
       }
 
       .translation-segment {
         margin-bottom: 16px;
         padding: 16px;
         border-radius: 8px;
-        background: rgba(255, 255, 255, 0.5);
+        background: rgba(255, 255, 255, 0.6);
         box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
         border: 1px solid rgba(236, 240, 241, 0.3);
-        transition: all 0.2s ease;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        transform-origin: center center;
       }
 
       .translation-segment:hover {
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-        transform: translateY(-1px);
+        transform: translateY(-4px) scale(1.01);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+        background: rgba(255, 255, 255, 0.75);
+        border-color: rgba(236, 240, 241, 0.5);
       }
 
       .dark-mode .translation-segment {
-        background: rgba(255, 255, 255, 0.03);
+        background: rgba(255, 255, 255, 0.05);
         border-color: rgba(255, 255, 255, 0.05);
         box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
       }
 
       .dark-mode .translation-segment:hover {
-        background: rgba(255, 255, 255, 0.05);
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        background: rgba(255, 255, 255, 0.08);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+        border-color: rgba(255, 255, 255, 0.1);
+      }
+
+      /* 为了让hover效果更加平滑，给前后的段落添加过渡效果 */
+      .translation-segment:hover + .translation-segment {
+        transform: translateY(2px);
       }
 
       .translation-segment:last-child {
@@ -494,6 +424,115 @@ class TranslationPopup {
 
       .dark-mode.translation-popup {
         background: rgba(26, 26, 26, 0.98);
+      }
+
+      .header-container {
+        position: sticky;
+        top: 0;
+        background: inherit;
+        border-radius: 12px 12px 0 0;
+        z-index: 2;
+        padding: 16px 20px;
+        flex-shrink: 0;
+        border-bottom: 1px solid rgba(236, 240, 241, 0.1);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+      }
+
+      .dark-mode .header-container {
+        border-bottom-color: rgba(255, 255, 255, 0.05);
+      }
+
+      .popup-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .popup-title {
+        font-size: 16px;
+        font-weight: 600;
+        color: #2c3e50;
+      }
+
+      .dark-mode .popup-title {
+        color: #fff;
+      }
+
+      .button-group {
+        display: flex;
+        gap: 8px;
+      }
+
+      .theme-button,
+      .close-button {
+        background: transparent;
+        border: none;
+        padding: 8px;
+        cursor: pointer;
+        color: #666;
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s ease;
+      }
+
+      .dark-mode .theme-button,
+      .dark-mode .close-button {
+        color: #999;
+      }
+
+      .theme-button:hover,
+      .close-button:hover {
+        background: #f5f5f5;
+        color: #333;
+      }
+
+      .dark-mode .theme-button:hover,
+      .dark-mode .close-button:hover {
+        background: #333;
+        color: #fff;
+      }
+
+      .theme-button:active,
+      .close-button:active {
+        background: #ebebeb;
+      }
+
+      .dark-mode .theme-button:active,
+      .dark-mode .close-button:active {
+        background: #404040;
+      }
+
+      .theme-button .light-icon {
+        display: none;
+      }
+
+      .theme-button .dark-icon {
+        display: block;
+      }
+
+      .dark-mode .theme-button .light-icon {
+        display: block;
+      }
+
+      .dark-mode .theme-button .dark-icon {
+        display: none;
+      }
+
+      .scroll-container {
+        padding: 20px 20px 0 20px;
+        overflow-y: auto;
+        flex: 1;
+        min-height: 0;
+        position: relative;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(155, 155, 155, 0.3) transparent;
+      }
+
+      .translation-content {
+        padding-bottom: 40px;
       }
     `;
 
