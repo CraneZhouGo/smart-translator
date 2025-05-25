@@ -6,11 +6,8 @@ async function loadConfig() {
     if (!window.TranslatorConfig) {
       throw new Error('Could not find TranslatorConfig in config.js');
     }
-    
     CONFIG = window.TranslatorConfig.CONFIG;
-    console.log('Config loaded successfully:', CONFIG);
   } catch (error) {
-    console.error('Failed to load config:', error);
     throw error;
   }
 }
@@ -743,24 +740,14 @@ class TranslationProcessor {
   }
 
   processTextForTranslation(text) {
-    console.log('Original text:', text);
-    console.log('Text length:', text.length);
-    
-    // 预处理文本，移除多余的空白字符
     text = text.replace(/\s+/g, ' ').trim();
     const segments = TextUtils.splitByPunctuation(text);
-    
-    console.log('Split into segments:', segments);
-    console.log('Number of segments:', segments.length);
     
     const cachedTranslations = new Map();
     const untranslatedSegments = [];
     
-    // 如果文本太长，分成更小的块
     if (text.length > TranslatorConfig.CONFIG.TRANSLATION.MAX_LENGTH) {
-      console.log('Text exceeds maximum length, splitting into smaller chunks');
       const chunks = this.splitIntoChunks(text, TranslatorConfig.CONFIG.TRANSLATION.MAX_LENGTH);
-      console.log('Split into chunks:', chunks);
       return {
         segments: chunks,
         cachedTranslations: new Map(),
@@ -769,15 +756,11 @@ class TranslationProcessor {
       };
     }
     
-    // 如果只有一个段落且长度适中，直接作为整体翻译
     if (segments.length === 1) {
-      console.log('Single segment, translating as whole');
       const cached = this.cache.get(text);
       if (cached) {
-        console.log('Found in cache:', cached);
         cachedTranslations.set(text, cached);
       } else {
-        console.log('Not found in cache, will translate');
         untranslatedSegments.push(text);
       }
       return {
@@ -788,26 +771,16 @@ class TranslationProcessor {
       };
     }
     
-    // 处理多个段落的情况
-    console.log('Processing multiple segments');
     for (const segment of segments) {
       const cached = this.cache.get(segment);
       if (cached) {
-        console.log('Segment found in cache:', { segment, translation: cached });
         cachedTranslations.set(segment, cached);
       } else {
-        console.log('Segment needs translation:', segment);
         untranslatedSegments.push(segment);
       }
     }
     
     const cacheRatio = ((segments.length - untranslatedSegments.length) / segments.length) * 100;
-    console.log('Translation stats:', {
-      totalSegments: segments.length,
-      cachedSegments: segments.length - untranslatedSegments.length,
-      untranslatedSegments: untranslatedSegments.length,
-      cacheRatio
-    });
     
     return {
       segments,
@@ -817,7 +790,6 @@ class TranslationProcessor {
     };
   }
 
-  // 将文本分割成指定最大长度的块
   splitIntoChunks(text, maxLength) {
     const chunks = [];
     let currentChunk = '';
@@ -830,7 +802,6 @@ class TranslationProcessor {
         if (currentChunk) {
           chunks.push(currentChunk);
         }
-        // 如果单个句子超过最大长度，需要进一步分割
         if (sentence.length > maxLength) {
           const subChunks = sentence.match(new RegExp(`.{1,${maxLength}}`, 'g')) || [];
           chunks.push(...subChunks);
@@ -849,42 +820,32 @@ class TranslationProcessor {
 
   async translateAndCache(untranslatedSegments) {
     try {
-      console.log('Starting translation for segments:', untranslatedSegments);
       const translations = [];
       
-      // 一次翻译一个段落，确保顺序正确
       for (let i = 0; i < untranslatedSegments.length; i++) {
         const segment = untranslatedSegments[i];
-        console.log(`Translating segment ${i + 1}/${untranslatedSegments.length}:`, segment);
-        
         const response = await this.sendTranslationRequest([segment]);
+        
         if (!response?.success || !response.translation) {
           throw new Error(response?.error || '翻译失败，请重试');
         }
         
-        console.log('Translation result:', response.translation);
         this.cache.set(segment, response.translation);
         translations.push(response.translation);
         
-        // 添加短暂延迟
         if (i < untranslatedSegments.length - 1) {
-          console.log('Waiting before next segment...');
           await new Promise(resolve => setTimeout(resolve, 300));
         }
       }
       
-      console.log('All translations completed:', translations);
       return translations;
     } catch (error) {
-      console.error('Translation error:', error);
       throw error;
     }
   }
 
   sendTranslationRequest(segments) {
     const text = segments.join('\n');
-    console.log('Sending translation request for text:', text);
-    console.log('Text length:', text.length);
     
     return new Promise((resolve) => {
       chrome.runtime.sendMessage(
@@ -894,14 +855,12 @@ class TranslationProcessor {
         },
         (response) => {
           if (chrome.runtime.lastError) {
-            console.error('Translation request failed:', chrome.runtime.lastError);
             resolve({ 
               success: false, 
               error: chrome.runtime.lastError.message 
             });
             return;
           }
-          console.log('Translation response received:', response);
           resolve(response);
         }
       );
@@ -909,67 +868,41 @@ class TranslationProcessor {
   }
 
   async rebuildTranslation(originalSegments, cachedTranslations, newTranslations, untranslatedSegments) {
-    console.log('Rebuilding translation from parts:', {
-      originalSegments,
-      cachedTranslations: Array.from(cachedTranslations.entries()),
-      newTranslations,
-      untranslatedSegments
-    });
-    
     const translatedParts = [];
     let newTranslationIndex = 0;
     
     for (const segment of originalSegments) {
-      console.log('Processing segment:', segment);
-      
-      // 首先检查缓存
       if (cachedTranslations.has(segment)) {
-        const translation = cachedTranslations.get(segment);
-        console.log('Found in cache:', translation);
-        translatedParts.push(translation);
+        translatedParts.push(cachedTranslations.get(segment));
         continue;
       }
       
-      // 然后检查新翻译
       const untranslatedIndex = untranslatedSegments.indexOf(segment);
       if (untranslatedIndex !== -1 && newTranslationIndex < newTranslations.length) {
-        const translation = newTranslations[newTranslationIndex++];
-        console.log('Using new translation:', translation);
-        translatedParts.push(translation);
+        translatedParts.push(newTranslations[newTranslationIndex++]);
         continue;
       }
       
-      // 如果都没有找到，记录警告并继续尝试翻译
-      console.warn('Missing translation for segment, retrying:', segment);
       try {
         const response = await this.sendTranslationRequest([segment]);
         if (response?.success && response.translation) {
-          console.log('Retry translation successful:', response.translation);
           this.cache.set(segment, response.translation);
           translatedParts.push(response.translation);
         } else {
-          console.warn('Retry failed, using original text');
           translatedParts.push(segment);
         }
       } catch (error) {
-        console.error('Retry translation failed:', error);
         translatedParts.push(segment);
       }
     }
     
-    // 移除空的翻译结果
     const filteredParts = translatedParts.filter(part => part && part.trim());
-    console.log('Filtered translation parts:', filteredParts);
     
-    // 如果没有任何翻译结果，返回原文
     if (filteredParts.length === 0) {
-      console.warn('No valid translations found, returning original text');
       return originalSegments.join('\n');
     }
     
-    const finalTranslation = filteredParts.join('\n');
-    console.log('Final translation:', finalTranslation);
-    return finalTranslation;
+    return filteredParts.join('\n');
   }
 }
 
