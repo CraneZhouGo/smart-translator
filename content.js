@@ -6,6 +6,7 @@ class TranslationPopup {
   constructor() {
     this.popup = null;
     this.content = null;
+    this.progressBar = null;
     this.init();
     this.setupEventListeners();
   }
@@ -21,6 +22,10 @@ class TranslationPopup {
     this.popup.className = 'translation-popup';
     this.content = document.createElement('div');
     this.content.className = 'translation-content';
+    
+    // Create progress bar
+    this.progressBar = document.createElement('div');
+    this.progressBar.className = 'progress-bar';
     
     // Add loading spinner
     const spinner = document.createElement('div');
@@ -46,6 +51,13 @@ class TranslationPopup {
         line-height: 1.5;
         color: #333;
       }
+      .translation-stats {
+        font-size: 12px;
+        color: #666;
+        margin-top: 8px;
+        padding-top: 8px;
+        border-top: 1px solid #eee;
+      }
       .spinner {
         width: 20px;
         height: 20px;
@@ -69,6 +81,7 @@ class TranslationPopup {
     `;
 
     this.popup.appendChild(this.content);
+    this.popup.appendChild(this.progressBar);
     shadow.appendChild(style);
     shadow.appendChild(this.popup);
     document.body.appendChild(container);
@@ -116,12 +129,15 @@ class TranslationPopup {
     this.popup.style.display = 'none';
   }
 
-  setContent(text) {
-    this.content.innerHTML = text;
-  }
-
   showLoading() {
     this.content.innerHTML = '<div class="spinner"></div>';
+  }
+
+  setContent(text, stats = '') {
+    this.content.innerHTML = `
+      <div class="translation-content">${text}</div>
+      ${stats ? `<div class="translation-stats">${stats}</div>` : ''}
+    `;
   }
 }
 
@@ -152,7 +168,41 @@ function splitByPunctuation(text) {
 
 // Clean text for cache key
 function normalizeText(text) {
-  return text.trim().toLowerCase();
+  return text
+    .trim()
+    // 移除开头和结尾的标点符号和空格
+    .replace(/^[\s.,!?;:'"()\[\]{}\/\\\-_+=<>@#$%^&*。！？]+|[\s.,!?;:'"()\[\]{}\/\\\-_+=<>@#$%^&*。！？]+$/g, '')
+    .toLowerCase();
+}
+
+// Find best match in cache
+function findBestMatch(text, cache) {
+  const normalized = normalizeText(text);
+  
+  // 直接匹配
+  if (cache.has(normalized)) {
+    return cache.get(normalized);
+  }
+
+  // 遍历缓存寻找最佳匹配
+  for (const [key, value] of cache.entries()) {
+    const normalizedKey = normalizeText(key);
+    
+    // 完全匹配（忽略大小写和首尾标点空格）
+    if (normalized === normalizedKey) {
+      return value;
+    }
+
+    // 检查是否只是标点符号或空格的差异
+    const cleanKey = normalizedKey.replace(/[\s.,!?;:'"()\[\]{}\/\\\-_+=<>@#$%^&*。！？]/g, '');
+    const cleanText = normalized.replace(/[\s.,!?;:'"()\[\]{}\/\\\-_+=<>@#$%^&*。！？]/g, '');
+    
+    if (cleanKey === cleanText) {
+      return value;
+    }
+  }
+
+  return null;
 }
 
 // Get cached translations and untranslated segments
@@ -162,10 +212,10 @@ function processTextForTranslation(text) {
   const untranslatedSegments = [];
 
   segments.forEach(segment => {
-    const normalized = normalizeText(segment);
-    const cached = translationCache.get(normalized);
+    // 尝试找到最佳匹配的缓存
+    const cached = findBestMatch(segment, translationCache);
     if (cached) {
-      cachedTranslations.set(normalized, cached);
+      cachedTranslations.set(normalizeText(segment), cached);
     } else {
       untranslatedSegments.push(segment);
     }
@@ -182,12 +232,16 @@ function cacheTranslationSegments(segments, translation) {
   const translatedSegments = splitByPunctuation(translation);
   if (segments.length === translatedSegments.length) {
     segments.forEach((segment, index) => {
+      // 使用原始文本作为键，这样可以保留原始的标点符号
+      translationCache.set(segment.trim(), translatedSegments[index]);
+      // 同时保存规范化后的版本
       translationCache.set(normalizeText(segment), translatedSegments[index]);
     });
     return translatedSegments;
   }
   // 如果段落数量不匹配，作为整体缓存
   const fullText = segments.join(' ');
+  translationCache.set(fullText.trim(), translation);
   translationCache.set(normalizeText(fullText), translation);
   return [translation];
 }
@@ -209,13 +263,18 @@ document.addEventListener('mouseup', debounce(async (e) => {
       // 处理文本，获取缓存和未翻译部分
       const { cachedTranslations, untranslatedSegments } = processTextForTranslation(selectedText);
       
+      // 计算缓存覆盖率
+      const allSegments = splitByPunctuation(selectedText);
+      const cachedRatio = ((allSegments.length - untranslatedSegments.length) / allSegments.length) * 100;
+      const apiRatio = (100 - cachedRatio).toFixed(1);
+      const statsText = `缓存覆盖: ${cachedRatio.toFixed(1)}% | 需要翻译: ${apiRatio}%`;
+      
       // 如果所有段落都有缓存，直接显示
       if (untranslatedSegments.length === 0) {
-        const allSegments = splitByPunctuation(selectedText);
         const translations = allSegments.map(segment => 
           cachedTranslations.get(normalizeText(segment))
         );
-        popup.setContent(`<div class="translation-content">${translations.join(' ')}</div>`);
+        popup.setContent(translations.join(' '), statsText);
         return;
       }
 
@@ -225,7 +284,7 @@ document.addEventListener('mouseup', debounce(async (e) => {
         function(response) {
           if (chrome.runtime.lastError) {
             console.error('Runtime error:', chrome.runtime.lastError);
-            popup.setContent(`<div class="translation-content">翻译失败: ${chrome.runtime.lastError.message}</div>`);
+            popup.setContent('翻译失败: ' + chrome.runtime.lastError.message);
             return;
           }
 
@@ -234,7 +293,6 @@ document.addEventListener('mouseup', debounce(async (e) => {
             const newTranslatedSegments = cacheTranslationSegments(untranslatedSegments, response.translation);
             
             // 按原文顺序重建完整翻译结果
-            const allSegments = splitByPunctuation(selectedText);
             const finalTranslations = allSegments.map(segment => {
               const normalized = normalizeText(segment);
               // 优先使用缓存的翻译
@@ -250,18 +308,17 @@ document.addEventListener('mouseup', debounce(async (e) => {
                 : segment;
             });
 
-            // 显示完整翻译
-            const finalTranslation = finalTranslations.join(' ');
-            popup.setContent(`<div class="translation-content">${finalTranslation}</div>`);
+            // 显示完整翻译和统计信息
+            popup.setContent(finalTranslations.join(' '), statsText);
           } else {
             const errorMessage = response?.error || '翻译失败，请重试';
-            popup.setContent(`<div class="translation-content">${errorMessage}</div>`);
+            popup.setContent(errorMessage);
           }
         }
       );
     } catch (error) {
       console.error('Translation error:', error);
-      popup.setContent(`<div class="translation-content">翻译出错，请检查扩展设置</div>`);
+      popup.setContent('翻译出错，请检查扩展设置');
     }
   } else if (popup.popup.style.display === 'block') {
     const isClickInside = e.composedPath().some(element => {
