@@ -49,14 +49,20 @@ async function handleTranslation(text) {
         messages: [
           {
             role: "system",
-            content: "You are a professional translator. Translate the following English text to Chinese. Only provide the translation, no explanations or additional text."
+            content: `你是一位专业的技术文档翻译专家。请将以下英文文本翻译成中文。注意：
+1. 保持专业术语的准确性，遇到专业术语时优先使用约定俗成的中文翻译
+2. 如果是数据库、编程等专业领域的术语，且没有广泛认可的中文翻译，保留英文术语
+3. 确保翻译通顺、符合中文表达习惯
+4. 只提供翻译结果，不要添加解释或额外文本
+5. 对于 base directory、tablespace 等专业术语，使用"基础目录"、"表空间"等对应的专业翻译
+6. 保持文本的格式和标点符号风格`
           },
           {
             role: "user",
             content: text
           }
         ],
-        temperature: 0.3,
+        temperature: 0.1,
         max_tokens: 2000
       })
     });
