@@ -172,16 +172,38 @@ class TranslationPopup {
     style.textContent = `
       .translation-popup {
         position: fixed;
+        top: 20px;
+        right: 20px;
         background: white;
         border-radius: 12px;
         box-shadow: 0 4px 20px rgba(0,0,0,0.15);
-        padding: 16px;
-        max-width: ${TranslatorConfig.CONFIG.UI.POPUP_MAX_WIDTH}px;
+        padding: 20px;
+        width: 600px;
+        max-height: 80vh;
+        overflow-y: auto;
         z-index: 999999;
         display: none;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         transition: opacity ${TranslatorConfig.CONFIG.UI.FADE_DURATION}ms ease;
         opacity: 0;
+      }
+      
+      .translation-popup::-webkit-scrollbar {
+        width: 8px;
+      }
+      
+      .translation-popup::-webkit-scrollbar-track {
+        background: #f1f1f1;
+        border-radius: 4px;
+      }
+      
+      .translation-popup::-webkit-scrollbar-thumb {
+        background: #c1c1c1;
+        border-radius: 4px;
+      }
+      
+      .translation-popup::-webkit-scrollbar-thumb:hover {
+        background: #a8a8a8;
       }
       
       .translation-popup.visible {
@@ -192,14 +214,40 @@ class TranslationPopup {
         font-size: 14px;
         line-height: 1.6;
         color: #2c3e50;
+      }
+
+      .translation-segment {
+        margin-bottom: 16px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid #ecf0f1;
+      }
+
+      .translation-segment:last-child {
+        border-bottom: none;
+        margin-bottom: 0;
+        padding-bottom: 0;
+      }
+
+      .original-text {
+        color: #7f8c8d;
+        font-size: 13px;
         margin-bottom: 8px;
+        padding: 8px;
+        background: #f8f9fa;
+        border-radius: 6px;
+      }
+
+      .translated-text {
+        color: #2c3e50;
+        font-size: 15px;
+        padding: 0 8px;
       }
 
       .translation-stats {
         font-size: 12px;
         color: #7f8c8d;
-        margin-top: 12px;
-        padding-top: 12px;
+        margin-top: 16px;
+        padding-top: 16px;
         border-top: 1px solid #ecf0f1;
         display: flex;
         justify-content: space-between;
@@ -256,17 +304,6 @@ class TranslationPopup {
   }
 
   setupEventListeners() {
-    // Close on outside click
-    document.addEventListener('click', (e) => {
-      const isClickInside = e.composedPath().some(element => {
-        return element === this.popup || element === this.content;
-      });
-
-      if (this.popup.style.display === 'block' && !isClickInside) {
-        this.hide();
-      }
-    });
-
     // Close on Escape
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
@@ -274,49 +311,24 @@ class TranslationPopup {
       }
     });
 
-    // Handle scroll
-    window.addEventListener('scroll', debounce(() => {
-      if (this.popup.style.display === 'block') {
-        this.updatePosition();
-      }
-    }, 100));
-
     // Handle resize
     window.addEventListener('resize', debounce(() => {
       if (this.popup.style.display === 'block') {
-        this.updatePosition();
+        this.updateMaxHeight();
       }
     }, 100));
   }
 
-  updatePosition() {
-    const rect = this.popup.getBoundingClientRect();
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-
-    let { left, top } = this.popup.style;
-    left = parseInt(left);
-    top = parseInt(top);
-
-    if (left + rect.width > viewportWidth) {
-      left = viewportWidth - rect.width - TranslatorConfig.CONFIG.UI.POPUP_OFFSET;
-    }
-
-    if (top + rect.height > viewportHeight) {
-      top = viewportHeight - rect.height - TranslatorConfig.CONFIG.UI.POPUP_OFFSET;
-    }
-
-    this.popup.style.left = `${left}px`;
-    this.popup.style.top = `${top}px`;
+  updateMaxHeight() {
+    const windowHeight = window.innerHeight;
+    const maxHeight = Math.floor(windowHeight * 0.8);
+    this.popup.style.maxHeight = `${maxHeight}px`;
   }
 
-  show(x, y) {
+  show() {
     this.popup.style.display = 'block';
-    this.popup.style.left = `${x + TranslatorConfig.CONFIG.UI.POPUP_OFFSET}px`;
-    this.popup.style.top = `${y + TranslatorConfig.CONFIG.UI.POPUP_OFFSET}px`;
-    
+    this.updateMaxHeight();
     requestAnimationFrame(() => {
-      this.updatePosition();
       this.popup.classList.add('visible');
     });
   }
@@ -333,12 +345,37 @@ class TranslationPopup {
     this.progressBar.classList.add('loading');
   }
 
-  setContent(text, stats = '') {
+  setContent(segments, translations, stats = '') {
     this.progressBar.classList.remove('loading');
-    this.content.innerHTML = `
-      <div class="translation-content">${text}</div>
-      ${stats ? `<div class="translation-stats">${stats}</div>` : ''}
-    `;
+    
+    // 清空内容
+    this.content.innerHTML = '';
+    
+    // 添加每个段落的原文和翻译
+    segments.forEach((segment, index) => {
+      const segmentDiv = document.createElement('div');
+      segmentDiv.className = 'translation-segment';
+      
+      const originalDiv = document.createElement('div');
+      originalDiv.className = 'original-text';
+      originalDiv.textContent = segment;
+      
+      const translatedDiv = document.createElement('div');
+      translatedDiv.className = 'translated-text';
+      translatedDiv.textContent = translations[index] || segment;
+      
+      segmentDiv.appendChild(originalDiv);
+      segmentDiv.appendChild(translatedDiv);
+      this.content.appendChild(segmentDiv);
+    });
+    
+    // 添加统计信息
+    if (stats) {
+      const statsDiv = document.createElement('div');
+      statsDiv.className = 'translation-stats';
+      statsDiv.textContent = stats;
+      this.content.appendChild(statsDiv);
+    }
   }
 }
 
@@ -660,17 +697,16 @@ async function handleTextSelection(e) {
     return;
   }
 
-  const x = e.pageX;
-  const y = e.pageY;
-
   popup.showLoading();
-  popup.show(x, y);
+  popup.show();
 
   try {
     // Check full text cache first
     const fullTranslation = translationCache.get(selectedText);
     if (fullTranslation) {
-      popup.setContent(fullTranslation, '缓存覆盖: 100% | 需要翻译: 0%');
+      const segments = [selectedText];
+      const translations = [fullTranslation];
+      popup.setContent(segments, translations, '缓存覆盖: 100% | 需要翻译: 0%');
       return;
     }
 
@@ -686,31 +722,27 @@ async function handleTextSelection(e) {
 
     // If everything is cached
     if (untranslatedSegments.length === 0) {
-      const translation = await translationProcessor.rebuildTranslation(
-        segments, 
-        cachedTranslations, 
-        [], 
-        []
-      );
-      popup.setContent(translation, statsText);
+      const translations = segments.map(segment => cachedTranslations.get(segment));
+      popup.setContent(segments, translations, statsText);
       return;
     }
 
     // Translate uncached segments
     const newTranslations = await translationProcessor.translateAndCache(untranslatedSegments);
     
-    // Rebuild final translation
-    const finalTranslation = await translationProcessor.rebuildTranslation(
-      segments,
-      cachedTranslations,
-      newTranslations,
-      untranslatedSegments
-    );
+    // Rebuild final translation with segments
+    const translations = segments.map(segment => {
+      if (cachedTranslations.has(segment)) {
+        return cachedTranslations.get(segment);
+      }
+      const index = untranslatedSegments.indexOf(segment);
+      return index !== -1 ? newTranslations[index] : segment;
+    });
 
-    popup.setContent(finalTranslation, statsText);
+    popup.setContent(segments, translations, statsText);
 
   } catch (error) {
     console.error('Translation error:', error);
-    popup.setContent(`翻译出错: ${error.message}`);
+    popup.setContent([selectedText], [`翻译出错: ${error.message}`]);
   }
 } 
