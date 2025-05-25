@@ -1,9 +1,38 @@
-// Configuration
-const CONFIG = {
-  DEEPSEEK_API_URL: 'https://api.deepseek.com/v1/chat/completions',
-  MAX_CACHE_SIZE: 100,
-  MAX_RETRIES: 3
-};
+// Load config dynamically
+let CONFIG = null;
+let MD5 = null;
+
+// 加载配置文件
+self.importScripts('config.js');
+
+function loadConfig() {
+  try {
+    if (!self.TranslatorConfig) {
+      throw new Error('Could not find TranslatorConfig in config.js');
+    }
+    
+    CONFIG = self.TranslatorConfig.CONFIG;
+    MD5 = self.TranslatorConfig.MD5;
+    
+    console.log('Config loaded successfully:', CONFIG);
+  } catch (error) {
+    console.error('Failed to load config:', error);
+    throw error;
+  }
+}
+
+// Initialize the background script
+function initialize() {
+  try {
+    loadConfig();
+    console.log('Background script initialized successfully');
+  } catch (error) {
+    console.error('Failed to initialize background script:', error);
+  }
+}
+
+// Start initialization
+initialize();
 
 // 监听来自content script的消息
 chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
@@ -23,7 +52,6 @@ chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
         });
       });
       
-    // 返回true表示我们将异步发送响应
     return true;
   }
 });
@@ -31,65 +59,65 @@ chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
 // 处理翻译请求
 async function handleTranslation(text) {
   try {
-    const apiKey = await getApiKey();
-    if (!apiKey) {
-      throw new Error('API key not found. Please set your DeepSeek API key in the extension settings.');
-    }
+    const salt = Date.now();
+    const sign = MD5(
+      CONFIG.BAIDU_API.APP_ID + 
+      text + 
+      salt + 
+      CONFIG.BAIDU_API.SECRET_KEY
+    );
+    
+    const params = new URLSearchParams({
+      q: text,
+      from: CONFIG.TRANSLATION.FROM,
+      to: CONFIG.TRANSLATION.TO,
+      appid: CONFIG.BAIDU_API.APP_ID,
+      salt: salt,
+      sign: sign
+    });
 
     console.log('Sending translation request for:', text);
     
-    const response = await fetch(CONFIG.DEEPSEEK_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: "deepseek-chat",
-        messages: [
-          {
-            role: "system",
-            content: `你是一位专业的技术文档翻译专家。请将以下英文文本翻译成中文。注意：
-1. 保持专业术语的准确性，遇到专业术语时优先使用约定俗成的中文翻译
-2. 如果是数据库、编程等专业领域的术语，且没有广泛认可的中文翻译，保留英文术语
-3. 确保翻译通顺、符合中文表达习惯
-4. 只提供翻译结果，不要添加解释或额外文本
-5. 对于 base directory、tablespace 等专业术语，使用"基础目录"、"表空间"等对应的专业翻译
-6. 保持文本的格式和标点符号风格`
+    const controller = new AbortController();
+    const timeoutId = setTimeout(
+      () => controller.abort(), 
+      CONFIG.BAIDU_API.TIMEOUT
+    );
+
+    try {
+      const response = await fetch(
+        `${CONFIG.BAIDU_API.API_URL}?${params.toString()}`,
+        {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded'
           },
-          {
-            role: "user",
-            content: text
-          }
-        ],
-        temperature: 0.1,
-        max_tokens: 2000
-      })
-    });
+          signal: controller.signal
+        }
+      );
 
-    if (!response.ok) {
-      throw new Error(`API request failed: ${response.status}`);
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`API request failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('API response:', data);
+
+      if (data.error_code) {
+        throw new Error(`Translation error: ${data.error_msg}`);
+      }
+
+      return data.trans_result[0].dst;
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        throw new Error('Translation request timed out');
+      }
+      throw error;
     }
-
-    const data = await response.json();
-    console.log('API response:', data);
-
-    if (!data.choices?.[0]?.message?.content) {
-      throw new Error('Invalid response from API');
-    }
-
-    return data.choices[0].message.content.trim();
   } catch (error) {
     console.error('Translation error:', error);
     throw error;
   }
 }
-
-// 从存储中获取API key
-async function getApiKey() {
-  return new Promise((resolve) => {
-    chrome.storage.sync.get(['apiKey'], (result) => {
-      resolve(result.apiKey || null);
-    });
-  });
-} 
