@@ -1,5 +1,38 @@
-// Translation cache
-const translationCache = new Map();
+// Translation cache with quick lookup maps
+const translationCache = {
+  exact: new Map(), // 精确匹配缓存
+  normalized: new Map(), // 规范化后的缓存
+  clean: new Map(), // 清理所有标点后的缓存
+  
+  // 设置缓存，同时更新所有Map
+  set(text, translation) {
+    const normalized = normalizeText(text);
+    const clean = cleanText(text);
+    
+    this.exact.set(text.trim(), translation);
+    this.normalized.set(normalized, translation);
+    this.clean.set(clean, translation);
+  },
+  
+  // 快速查找匹配
+  get(text) {
+    const trimmed = text.trim();
+    // 1. 直接匹配
+    if (this.exact.has(trimmed)) {
+      return this.exact.get(trimmed);
+    }
+    
+    // 2. 规范化匹配
+    const normalized = normalizeText(text);
+    if (this.normalized.has(normalized)) {
+      return this.normalized.get(normalized);
+    }
+    
+    // 3. 清理后匹配
+    const clean = cleanText(text);
+    return this.clean.get(clean);
+  }
+};
 
 // Translation popup class
 class TranslationPopup {
@@ -159,90 +192,90 @@ function isEnglishText(text) {
   return true;
 }
 
-// Split text by punctuation
-function splitByPunctuation(text) {
-  // 按标点符号分割文本，保留标点符号
-  const segments = text.match(/[^.!?。！？]+[.!?。！？]|[^.!?。！？]+$/g) || [text];
-  return segments.map(segment => segment.trim()).filter(segment => segment.length > 0);
+// 清理所有标点和空格，用于模糊匹配
+function cleanText(text) {
+  return text.replace(/[\s.,!?;:'"()\[\]{}\/\\\-_+=<>@#$%^&*。！？]/g, '').toLowerCase();
 }
 
-// Clean text for cache key
+// 规范化文本，保留句子间标点
 function normalizeText(text) {
   return text
     .trim()
-    // 移除开头和结尾的标点符号和空格
     .replace(/^[\s.,!?;:'"()\[\]{}\/\\\-_+=<>@#$%^&*。！？]+|[\s.,!?;:'"()\[\]{}\/\\\-_+=<>@#$%^&*。！？]+$/g, '')
     .toLowerCase();
 }
 
-// Find best match in cache
-function findBestMatch(text, cache) {
-  const normalized = normalizeText(text);
+// 优化的文本分割函数
+function splitByPunctuation(text) {
+  // 预先分配足够大的数组以避免扩容
+  const segments = [];
+  let currentSegment = '';
+  let i = 0;
   
-  // 直接匹配
-  if (cache.has(normalized)) {
-    return cache.get(normalized);
-  }
-
-  // 遍历缓存寻找最佳匹配
-  for (const [key, value] of cache.entries()) {
-    const normalizedKey = normalizeText(key);
+  while (i < text.length) {
+    currentSegment += text[i];
     
-    // 完全匹配（忽略大小写和首尾标点空格）
-    if (normalized === normalizedKey) {
-      return value;
+    // 检查是否遇到句子结束标记
+    if (/[.!?。！？]/.test(text[i]) || i === text.length - 1) {
+      if (currentSegment.trim()) {
+        segments.push(currentSegment.trim());
+      }
+      currentSegment = '';
     }
-
-    // 检查是否只是标点符号或空格的差异
-    const cleanKey = normalizedKey.replace(/[\s.,!?;:'"()\[\]{}\/\\\-_+=<>@#$%^&*。！？]/g, '');
-    const cleanText = normalized.replace(/[\s.,!?;:'"()\[\]{}\/\\\-_+=<>@#$%^&*。！？]/g, '');
-    
-    if (cleanKey === cleanText) {
-      return value;
-    }
+    i++;
   }
-
-  return null;
+  
+  return segments;
 }
 
-// Get cached translations and untranslated segments
+// 优化的翻译处理函数
 function processTextForTranslation(text) {
   const segments = splitByPunctuation(text);
   const cachedTranslations = new Map();
   const untranslatedSegments = [];
-
-  segments.forEach(segment => {
-    // 尝试找到最佳匹配的缓存
-    const cached = findBestMatch(segment, translationCache);
+  
+  // 预先计算段落数量以优化数组分配
+  const segmentCount = segments.length;
+  untranslatedSegments.length = segmentCount;
+  
+  let untranslatedCount = 0;
+  
+  // 单次遍历处理所有段落
+  for (let i = 0; i < segmentCount; i++) {
+    const segment = segments[i];
+    const cached = translationCache.get(segment);
+    
     if (cached) {
       cachedTranslations.set(normalizeText(segment), cached);
     } else {
-      untranslatedSegments.push(segment);
+      untranslatedSegments[untranslatedCount++] = segment;
     }
-  });
-
+  }
+  
+  // 截断未使用的空间
+  untranslatedSegments.length = untranslatedCount;
+  
   return {
     cachedTranslations,
     untranslatedSegments
   };
 }
 
-// Cache translation segments
+// 优化的缓存存储函数
 function cacheTranslationSegments(segments, translation) {
   const translatedSegments = splitByPunctuation(translation);
+  
   if (segments.length === translatedSegments.length) {
-    segments.forEach((segment, index) => {
-      // 使用原始文本作为键，这样可以保留原始的标点符号
-      translationCache.set(segment.trim(), translatedSegments[index]);
-      // 同时保存规范化后的版本
-      translationCache.set(normalizeText(segment), translatedSegments[index]);
-    });
+    // 批量缓存所有段落
+    for (let i = 0; i < segments.length; i++) {
+      translationCache.set(segments[i], translatedSegments[i]);
+    }
     return translatedSegments;
   }
-  // 如果段落数量不匹配，作为整体缓存
+  
+  // 整体缓存
   const fullText = segments.join(' ');
-  translationCache.set(fullText.trim(), translation);
-  translationCache.set(normalizeText(fullText), translation);
+  translationCache.set(fullText, translation);
   return [translation];
 }
 
@@ -250,83 +283,86 @@ function cacheTranslationSegments(segments, translation) {
 document.addEventListener('mouseup', debounce(async (e) => {
   const selectedText = window.getSelection().toString().trim();
   
-  // 检查是否为英文文本
-  if (selectedText && selectedText.length > 0 && isEnglishText(selectedText)) {
-    const x = e.pageX + 10;
-    const y = e.pageY + 10;
+  // 快速检查是否需要处理
+  if (!selectedText || selectedText.length === 0 || !isEnglishText(selectedText)) {
+    return;
+  }
 
-    // Show popup with loading state
-    popup.showLoading();
-    popup.show(x, y);
+  const x = e.pageX + 10;
+  const y = e.pageY + 10;
 
-    try {
-      // 处理文本，获取缓存和未翻译部分
-      const { cachedTranslations, untranslatedSegments } = processTextForTranslation(selectedText);
-      
-      // 计算缓存覆盖率
-      const allSegments = splitByPunctuation(selectedText);
-      const cachedRatio = ((allSegments.length - untranslatedSegments.length) / allSegments.length) * 100;
-      const apiRatio = (100 - cachedRatio).toFixed(1);
-      const statsText = `缓存覆盖: ${cachedRatio.toFixed(1)}% | 需要翻译: ${apiRatio}%`;
-      
-      // 如果所有段落都有缓存，直接显示
-      if (untranslatedSegments.length === 0) {
-        const translations = allSegments.map(segment => 
-          cachedTranslations.get(normalizeText(segment))
-        );
-        popup.setContent(translations.join(' '), statsText);
-        return;
-      }
+  // Show popup with loading state
+  popup.showLoading();
+  popup.show(x, y);
 
-      // 翻译未缓存的部分
-      chrome.runtime.sendMessage(
-        { action: 'translate', text: untranslatedSegments.join(' ') },
-        function(response) {
-          if (chrome.runtime.lastError) {
-            console.error('Runtime error:', chrome.runtime.lastError);
-            popup.setContent('翻译失败: ' + chrome.runtime.lastError.message);
-            return;
-          }
+  try {
+    // 检查完整文本是否有缓存
+    const fullTranslation = translationCache.get(selectedText);
+    if (fullTranslation) {
+      popup.setContent(fullTranslation, '缓存覆盖: 100% | 需要翻译: 0%');
+      return;
+    }
 
-          if (response && response.success && response.translation) {
-            // 缓存新翻译的段落
-            const newTranslatedSegments = cacheTranslationSegments(untranslatedSegments, response.translation);
-            
-            // 按原文顺序重建完整翻译结果
-            const finalTranslations = allSegments.map(segment => {
-              const normalized = normalizeText(segment);
-              // 优先使用缓存的翻译
-              if (cachedTranslations.has(normalized)) {
-                return cachedTranslations.get(normalized);
-              }
-              // 如果不在缓存中，从新翻译的结果中获取
-              const index = untranslatedSegments.findIndex(s => 
-                normalizeText(s) === normalized
-              );
-              return index !== -1 && index < newTranslatedSegments.length
-                ? newTranslatedSegments[index]
-                : segment;
-            });
+    // 处理文本，获取缓存和未翻译部分
+    const { cachedTranslations, untranslatedSegments } = processTextForTranslation(selectedText);
+    
+    // 计算缓存覆盖率
+    const totalSegments = splitByPunctuation(selectedText).length;
+    const cachedRatio = ((totalSegments - untranslatedSegments.length) / totalSegments) * 100;
+    const apiRatio = (100 - cachedRatio).toFixed(1);
+    const statsText = `缓存覆盖: ${cachedRatio.toFixed(1)}% | 需要翻译: ${apiRatio}%`;
+    
+    // 如果所有段落都有缓存，直接显示
+    if (untranslatedSegments.length === 0) {
+      const translations = [];
+      splitByPunctuation(selectedText).forEach(segment => {
+        translations.push(cachedTranslations.get(normalizeText(segment)));
+      });
+      popup.setContent(translations.join(' '), statsText);
+      return;
+    }
 
-            // 显示完整翻译和统计信息
-            popup.setContent(finalTranslations.join(' '), statsText);
-          } else {
-            const errorMessage = response?.error || '翻译失败，请重试';
-            popup.setContent(errorMessage);
-          }
+    // 翻译未缓存的部分
+    chrome.runtime.sendMessage(
+      { 
+        action: 'translate', 
+        text: untranslatedSegments.join(' ')
+      },
+      function(response) {
+        if (chrome.runtime.lastError) {
+          console.error('Runtime error:', chrome.runtime.lastError);
+          popup.setContent('翻译失败: ' + chrome.runtime.lastError.message);
+          return;
         }
-      );
-    } catch (error) {
-      console.error('Translation error:', error);
-      popup.setContent('翻译出错，请检查扩展设置');
-    }
-  } else if (popup.popup.style.display === 'block') {
-    const isClickInside = e.composedPath().some(element => {
-      return element === popup.popup || element === popup.content;
-    });
-    if (!isClickInside) {
-      popup.hide();
-    }
+
+        if (response?.success && response.translation) {
+          const newTranslatedSegments = cacheTranslationSegments(untranslatedSegments, response.translation);
+          
+          // 重建翻译结果
+          const finalTranslations = [];
+          splitByPunctuation(selectedText).forEach(segment => {
+            const normalized = normalizeText(segment);
+            if (cachedTranslations.has(normalized)) {
+              finalTranslations.push(cachedTranslations.get(normalized));
+            } else {
+              const index = untranslatedSegments.findIndex(s => normalizeText(s) === normalized);
+              if (index !== -1 && index < newTranslatedSegments.length) {
+                finalTranslations.push(newTranslatedSegments[index]);
+              } else {
+                finalTranslations.push(segment);
+              }
+            }
+          });
+
+          popup.setContent(finalTranslations.join(' '), statsText);
+        } else {
+          popup.setContent(response?.error || '翻译失败，请重试');
+        }
+      }
+    );
+  } catch (error) {
+    console.error('Translation error:', error);
+    popup.setContent('翻译出错，请检查扩展设置');
   }
 }, 300));
 
