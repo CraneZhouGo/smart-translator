@@ -63,3 +63,47 @@
 ## 📜 开源协议
 
 MIT License - 详见 LICENSE 文件
+
+## 安装说明
+
+1. 克隆仓库：
+```bash
+git clone https://github.com/your-username/smart-translator.git
+```
+
+2. 配置API密钥：
+   - 复制 `config.template.js` 为 `config.js`
+   - 在 `config.js` 中填入你的百度翻译API密钥：
+     ```js
+     BAIDU_API: {
+       APP_ID: 'YOUR_APP_ID_HERE',
+       SECRET_KEY: 'YOUR_SECRET_KEY_HERE',
+       ...
+     }
+     ```
+   注意：请勿将包含实际API密钥的 `config.js` 提交到代码仓库！
+
+3. 在Chrome中加载扩展：
+   - 打开Chrome扩展管理页面 (chrome://extensions/)
+   - 启用"开发者模式"
+   - 点击"加载已解压的扩展程序"
+   - 选择项目目录
+
+## 获取API密钥
+
+1. 访问[百度翻译开放平台](http://api.fanyi.baidu.com/api/trans/product/desktop)
+2. 注册/登录账号
+3. 创建应用，获取APP ID和密钥
+4. 将获取的密钥填入 `config.js`
+
+## 开发说明
+
+- 修改代码后需要在扩展管理页面点击刷新按钮
+- 请确保不要提交 `config.js` 文件
+- 提交代码前检查是否包含敏感信息
+
+## 隐私说明
+
+- 仅在必要时访问翻译API
+- 所有缓存均存储在本地
+- 不收集任何用户数据

@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Translator - 发布指南</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1, h2, h3 {
+            color: #2c3e50;
+        }
+        h1 {
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+        }
+        .container {
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 30px;
+            margin: 20px 0;
+        }
+        code {
+            background: #f8f9fa;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+        }
+        pre {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+        }
+        .note {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 0 8px 8px 0;
+        }
+        .important {
+            background: #f8d7da;
+            border-left: 4px solid #dc3545;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 0 8px 8px 0;
+        }
+        ul {
+            padding-left: 20px;
+        }
+        li {
+            margin: 8px 0;
+        }
+        @media (prefers-color-scheme: dark) {
+            body {
+                background: #1a1a1a;
+                color: #e0e0e0;
+            }
+            .container {
+                background: #2d2d2d;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            }
+            h1, h2, h3 {
+                color: #e0e0e0;
+            }
+            h1 {
+                border-bottom-color: #333;
+            }
+            code, pre {
+                background: #333;
+                color: #e0e0e0;
+            }
+            .note {
+                background: #2c2a1c;
+                color: #ffe083;
+            }
+            .important {
+                background: #2c1f21;
+                color: #ffb3b9;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Smart Translator Chrome 扩展发布指南</h1>
+
+        <h2>1. 准备工作</h2>
+        
+        <h3>1.1 开发者账号注册</h3>
+        <ul>
+            <li>访问 <a href="https://chrome.google.com/webstore/devconsole" target="_blank">Chrome Web Store Developer Dashboard</a></li>
+            <li>支付一次性注册费（$5.00 USD）</li>
+            <li>完成开发者账号验证</li>
+        </ul>
+
+        <h3>1.2 准备发布材料</h3>
+        <p>确保以下文件已准备就绪：</p>
+        <pre>
+extension/
+├── manifest.json
+├── content.js
+├── background.js
+├── config.js
+├── content.css
+├── icons/
+│   ├── icon16.png
+│   ├── icon32.png
+│   ├── icon48.png
+│   └── icon128.png
+├── README.md
+└── LICENSE</pre>
+
+        <h3>1.3 准备商店展示材料</h3>
+        <ul>
+            <li>商店图标（128x128 PNG）</li>
+            <li>至少一张截图（1280x800 或 640x400）</li>
+            <li>简短描述（最多132字）</li>
+            <li>详细描述（最多16,000字）</li>
+            <li>宣传图片（440x280，可选）</li>
+            <li>宣传视频（YouTube，可选）</li>
+        </ul>
+
+        <div class="note">
+            <strong>注意：</strong> 所有图片必须是 PNG 或 JPEG 格式，大小不超过 2MB。
+        </div>
+
+        <h2>2. 打包扩展</h2>
+        
+        <h3>2.1 创建发布包</h3>
+        <p>执行以下命令创建 ZIP 包：</p>
+        <pre>zip -r smart-translator.zip extension/* -x "*.git*" -x "*.DS_Store"</pre>
+
+        <div class="note">
+            <strong>提示：</strong> Windows 用户可以使用 7-Zip 或其他压缩工具创建 ZIP 文件。
+        </div>
+
+        <h2>3. 提交审核</h2>
+
+        <h3>3.1 基本信息填写</h3>
+        <ul>
+            <li>扩展名称：Smart Translator - 智能翻译</li>
+            <li>简短描述：优雅的英文到中文翻译工具，支持智能缓存、上下文感知和现代化UI设计。</li>
+            <li>详细描述：（见下文）</li>
+        </ul>
+
+        <h3>3.2 详细描述模板</h3>
+        <pre>Smart Translator 是一款现代化的翻译扩展，让英文阅读更轻松：
+
+主要特点：
+✓ 即时翻译：选中即译，无需额外点击
+✓ 智能缓存：相同内容秒速翻译
+✓ 优雅界面：现代化设计，支持暗黑模式
+✓ 智能分段：自动识别文本结构
+✓ 隐私保护：本地缓存，无需登录
+
+使用方法：
+1. 安装后即可使用，无需配置
+2. 选中任意英文文本自动显示翻译
+3. 支持长文本智能分段
+4. 右上角按钮切换暗黑模式
+
+隐私说明：
+- 仅在必要时访问翻译API
+- 所有缓存均存储在本地
+- 不收集任何用户数据</pre>
+
+        <h3>3.3 类别与可见性</h3>
+        <ul>
+            <li>主类别：生产力工具</li>
+            <li>子类别：翻译工具</li>
+            <li>语言：中文（简体）</li>
+            <li>可见性：公开</li>
+        </ul>
+
+        <h2>4. 隐私与安全</h2>
+
+        <div class="important">
+            <strong>重要：</strong> 必须完成以下步骤才能发布：
+        </div>
+
+        <h3>4.1 隐私权规范</h3>
+        <ul>
+            <li>提供隐私权政策链接</li>
+            <li>说明单一用途</li>
+            <li>说明权限使用原因</li>
+            <li>说明数据收集和使用方式</li>
+        </ul>
+
+        <h3>4.2 必填信息</h3>
+        <ul>
+            <li>开发者邮箱地址（必须验证）</li>
+            <li>确认遵守开发者计划政策</li>
+            <li>确认数据使用合规性</li>
+        </ul>
+
+        <h2>5. 发布后维护</h2>
+
+        <h3>5.1 版本更新流程</h3>
+        <ol>
+            <li>修改 manifest.json 中的版本号</li>
+            <li>更新变更日志</li>
+            <li>重新打包扩展</li>
+            <li>在开发者后台提交新版本</li>
+            <li>等待审核通过</li>
+        </ol>
+
+        <h3>5.2 用户支持</h3>
+        <ul>
+            <li>及时响应用户反馈</li>
+            <li>定期检查错误报告</li>
+            <li>维护更新日志</li>
+            <li>提供技术支持</li>
+        </ul>
+
+        <div class="note">
+            <strong>建议：</strong> 保持定期更新和维护，确保扩展功能稳定性和安全性。
+        </div>
+
+        <p><em>最后更新日期：2024年3月</em></p>
+    </div>
+</body>
+</html> 
