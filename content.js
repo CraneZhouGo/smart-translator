@@ -147,6 +147,8 @@ class TranslationPopup {
     this.popup = null;
     this.content = null;
     this.progressBar = null;
+    this.statsDiv = null;
+    this.isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
     this.init();
     this.setupEventListeners();
   }
@@ -154,10 +156,77 @@ class TranslationPopup {
   init() {
     const container = document.createElement('div');
     container.id = 'quick-translator-container';
+    container.style.position = 'fixed';
+    container.style.zIndex = '999999';
+    container.style.top = '0';
+    container.style.left = '0';
+    container.style.width = '100%';
+    container.style.height = '100%';
+    container.style.pointerEvents = 'none';
     const shadow = container.attachShadow({ mode: 'closed' });
 
+    // 创建主容器
     this.popup = document.createElement('div');
     this.popup.className = 'translation-popup';
+    this.popup.style.pointerEvents = 'auto';
+    this.popup.classList.toggle('dark-mode', this.isDarkMode);
+
+    // 创建固定的头部容器
+    const headerContainer = document.createElement('div');
+    headerContainer.className = 'header-container';
+    
+    const header = document.createElement('div');
+    header.className = 'popup-header';
+
+    // 添加标题
+    const title = document.createElement('div');
+    title.className = 'popup-title';
+    title.textContent = '智能翻译';
+    header.appendChild(title);
+
+    // 添加按钮组
+    const buttonGroup = document.createElement('div');
+    buttonGroup.className = 'button-group';
+
+    // 添加暗黑模式切换按钮
+    const themeButton = document.createElement('button');
+    themeButton.className = 'theme-button';
+    themeButton.innerHTML = `
+      <svg class="light-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+        <circle cx="12" cy="12" r="5"/>
+        <line x1="12" y1="1" x2="12" y2="3"/>
+        <line x1="12" y1="21" x2="12" y2="23"/>
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+        <line x1="1" y1="12" x2="3" y2="12"/>
+        <line x1="21" y1="12" x2="23" y2="12"/>
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+      </svg>
+      <svg class="dark-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+      </svg>
+    `;
+    themeButton.addEventListener('click', () => this.toggleTheme());
+    
+    const closeButton = document.createElement('button');
+    closeButton.className = 'close-button';
+    closeButton.innerHTML = `
+      <svg width="14" height="14" viewBox="0 0 14 14">
+        <path d="M13 1L1 13M1 1L13 13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    `;
+    closeButton.addEventListener('click', () => this.hide());
+    
+    buttonGroup.appendChild(themeButton);
+    buttonGroup.appendChild(closeButton);
+    header.appendChild(buttonGroup);
+    headerContainer.appendChild(header);
+
+    // 创建内容滚动容器
+    const scrollContainer = document.createElement('div');
+    scrollContainer.className = 'scroll-container';
+
     this.content = document.createElement('div');
     this.content.className = 'translation-content';
     
@@ -168,6 +237,10 @@ class TranslationPopup {
     spinner.className = 'spinner';
     this.content.appendChild(spinner);
 
+    // 创建统计信息容器
+    this.statsDiv = document.createElement('div');
+    this.statsDiv.className = 'translation-stats';
+
     const style = document.createElement('style');
     style.textContent = `
       .translation-popup {
@@ -177,112 +250,229 @@ class TranslationPopup {
         background: white;
         border-radius: 12px;
         box-shadow: 0 4px 20px rgba(0,0,0,0.15);
-        padding: 20px;
         width: 600px;
-        max-height: 80vh;
-        overflow-y: auto;
+        height: auto;
+        max-height: calc(100vh - 40px);
         z-index: 999999;
-        display: none;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        transition: opacity ${TranslatorConfig.CONFIG.UI.FADE_DURATION}ms ease;
+        transition: all ${TranslatorConfig.CONFIG.UI.FADE_DURATION}ms ease;
         opacity: 0;
+        display: none;
+        flex-direction: column;
+        overflow: hidden;
       }
-      
-      .translation-popup::-webkit-scrollbar {
-        width: 8px;
-      }
-      
-      .translation-popup::-webkit-scrollbar-track {
-        background: #f1f1f1;
-        border-radius: 4px;
-      }
-      
-      .translation-popup::-webkit-scrollbar-thumb {
-        background: #c1c1c1;
-        border-radius: 4px;
-      }
-      
-      .translation-popup::-webkit-scrollbar-thumb:hover {
-        background: #a8a8a8;
-      }
-      
+
       .translation-popup.visible {
         opacity: 1;
       }
 
-      .translation-content {
-        font-size: 14px;
-        line-height: 1.6;
+      .dark-mode {
+        background: #1a1a1a;
+        color: #fff;
+      }
+
+      .header-container {
+        position: sticky;
+        top: 0;
+        background: inherit;
+        border-radius: 12px 12px 0 0;
+        z-index: 2;
+        padding: 16px 20px;
+        flex-shrink: 0;
+        border-bottom: 1px solid #ecf0f1;
+      }
+
+      .dark-mode .header-container {
+        border-bottom-color: #333;
+      }
+
+      .popup-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .popup-title {
+        font-size: 16px;
+        font-weight: 600;
         color: #2c3e50;
+      }
+
+      .dark-mode .popup-title {
+        color: #fff;
+      }
+
+      .button-group {
+        display: flex;
+        gap: 8px;
+      }
+
+      .theme-button,
+      .close-button {
+        background: transparent;
+        border: none;
+        padding: 8px;
+        cursor: pointer;
+        color: #666;
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s ease;
+      }
+
+      .dark-mode .theme-button,
+      .dark-mode .close-button {
+        color: #999;
+      }
+
+      .theme-button:hover,
+      .close-button:hover {
+        background: #f5f5f5;
+        color: #333;
+      }
+
+      .dark-mode .theme-button:hover,
+      .dark-mode .close-button:hover {
+        background: #333;
+        color: #fff;
+      }
+
+      .theme-button:active,
+      .close-button:active {
+        background: #ebebeb;
+      }
+
+      .dark-mode .theme-button:active,
+      .dark-mode .close-button:active {
+        background: #404040;
+      }
+
+      .theme-button .light-icon {
+        display: none;
+      }
+
+      .theme-button .dark-icon {
+        display: block;
+      }
+
+      .dark-mode .theme-button .light-icon {
+        display: block;
+      }
+
+      .dark-mode .theme-button .dark-icon {
+        display: none;
+      }
+
+      .scroll-container {
+        padding: 20px 20px 0 20px;
+        overflow-y: auto;
+        flex: 1;
+        min-height: 0;
+        position: relative;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(155, 155, 155, 0.3) transparent;
+      }
+
+      .translation-content {
+        padding-bottom: 40px;
       }
 
       .translation-segment {
         margin-bottom: 16px;
-        padding-bottom: 16px;
-        border-bottom: 1px solid #ecf0f1;
+        padding: 16px;
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.5);
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+        border: 1px solid rgba(236, 240, 241, 0.3);
+        transition: all 0.2s ease;
+      }
+
+      .translation-segment:hover {
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        transform: translateY(-1px);
+      }
+
+      .dark-mode .translation-segment {
+        background: rgba(255, 255, 255, 0.03);
+        border-color: rgba(255, 255, 255, 0.05);
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+      }
+
+      .dark-mode .translation-segment:hover {
+        background: rgba(255, 255, 255, 0.05);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
       }
 
       .translation-segment:last-child {
-        border-bottom: none;
         margin-bottom: 0;
-        padding-bottom: 0;
       }
 
       .original-text {
-        color: #7f8c8d;
-        font-size: 13px;
-        margin-bottom: 8px;
-        padding: 8px;
-        background: #f8f9fa;
-        border-radius: 6px;
+        color: #2c3e50;
+        font-size: 14px;
+        line-height: 1.6;
+        margin-bottom: 12px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid rgba(236, 240, 241, 0.3);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+
+      .dark-mode .original-text {
+        color: rgba(255, 255, 255, 0.9);
+        border-bottom-color: rgba(255, 255, 255, 0.05);
       }
 
       .translated-text {
-        color: #2c3e50;
-        font-size: 15px;
-        padding: 0 8px;
+        color: #34495e;
+        font-size: 14px;
+        line-height: 1.6;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+      }
+
+      .dark-mode .translated-text {
+        color: rgba(255, 255, 255, 0.85);
       }
 
       .translation-stats {
+        position: sticky;
+        bottom: 0;
+        left: 0;
+        right: 0;
         font-size: 12px;
         color: #7f8c8d;
-        margin-top: 16px;
-        padding-top: 16px;
-        border-top: 1px solid #ecf0f1;
+        padding: 10px 20px;
+        margin: 0 -20px;
+        background: inherit;
+        border-top: 1px solid rgba(236, 240, 241, 0.3);
         display: flex;
         justify-content: space-between;
+        align-items: center;
+        z-index: 1;
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
       }
 
-      .spinner {
-        width: 24px;
-        height: 24px;
-        border: 3px solid #e0e0e0;
-        border-top: 3px solid #3498db;
+      .dark-mode .translation-stats {
+        color: rgba(255, 255, 255, 0.6);
+        border-top-color: rgba(255, 255, 255, 0.05);
+        background: rgba(26, 26, 26, 0.8);
+      }
+
+      .translation-stats.translating {
+        color: #3498db;
+      }
+
+      .translation-stats.translating::after {
+        content: '';
+        width: 12px;
+        height: 12px;
+        margin-left: 8px;
+        border: 2px solid;
+        border-color: #3498db transparent #3498db transparent;
         border-radius: 50%;
         animation: spin 1s linear infinite;
-        margin: 12px auto;
-      }
-
-      .progress-bar {
-        height: 2px;
-        background: #e0e0e0;
-        margin-top: 8px;
-        border-radius: 1px;
-        overflow: hidden;
-      }
-
-      .progress-bar::after {
-        content: '';
-        display: block;
-        height: 100%;
-        width: 0;
-        background: #3498db;
-        transition: width 0.3s ease;
-      }
-
-      .progress-bar.loading::after {
-        width: 100%;
-        animation: loading 2s infinite ease-in-out;
+        display: inline-block;
       }
 
       @keyframes spin {
@@ -290,33 +480,66 @@ class TranslationPopup {
         100% { transform: rotate(360deg); }
       }
 
-      @keyframes loading {
-        0% { transform: translateX(-100%); }
-        100% { transform: translateX(100%); }
+      .dark-mode .translation-stats.translating {
+        color: #5dade2;
+      }
+
+      .dark-mode .translation-stats.translating::after {
+        border-color: #5dade2 transparent #5dade2 transparent;
+      }
+
+      .translation-popup {
+        background: rgba(255, 255, 255, 0.98);
+      }
+
+      .dark-mode.translation-popup {
+        background: rgba(26, 26, 26, 0.98);
       }
     `;
 
-    this.popup.appendChild(this.content);
-    this.popup.appendChild(this.progressBar);
+    // 组装DOM结构
+    scrollContainer.appendChild(this.content);
+    scrollContainer.appendChild(this.statsDiv);
+    scrollContainer.appendChild(this.progressBar);
+    
+    this.popup.appendChild(headerContainer);
+    this.popup.appendChild(scrollContainer);
+    
     shadow.appendChild(style);
     shadow.appendChild(this.popup);
     document.body.appendChild(container);
   }
 
+  toggleTheme() {
+    this.isDarkMode = !this.isDarkMode;
+    this.popup.classList.toggle('dark-mode', this.isDarkMode);
+  }
+
   setupEventListeners() {
+    // 监听系统主题变化
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+      this.isDarkMode = e.matches;
+      this.popup.classList.toggle('dark-mode', this.isDarkMode);
+    });
+
     // Close on Escape
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
+      if (e.key === 'Escape' && this.popup.style.display !== 'none') {
         this.hide();
       }
     });
 
     // Handle resize
     window.addEventListener('resize', debounce(() => {
-      if (this.popup.style.display === 'block') {
+      if (this.popup.style.display !== 'none') {
         this.updateMaxHeight();
       }
     }, 100));
+
+    // 防止点击弹窗内部时触发选择文本事件
+    this.popup.addEventListener('mouseup', (e) => {
+      e.stopPropagation();
+    });
   }
 
   updateMaxHeight() {
@@ -326,27 +549,56 @@ class TranslationPopup {
   }
 
   show() {
-    this.popup.style.display = 'block';
-    this.updateMaxHeight();
+    // 重置滚动位置
+    if (this.popup.querySelector('.scroll-container')) {
+      this.popup.querySelector('.scroll-container').scrollTop = 0;
+    }
+    
+    // 显示弹窗
+    this.popup.style.display = 'flex';
+    this.popup.style.opacity = '0';
+    
+    // 强制重排以确保过渡效果生效
+    this.popup.offsetHeight;
+    
+    // 添加可见性并设置不透明度
     requestAnimationFrame(() => {
       this.popup.classList.add('visible');
+      this.popup.style.opacity = '1';
     });
+    
+    this.updateMaxHeight();
   }
 
   hide() {
     this.popup.classList.remove('visible');
+    this.popup.style.opacity = '0';
+    
     setTimeout(() => {
       this.popup.style.display = 'none';
     }, TranslatorConfig.CONFIG.UI.FADE_DURATION);
   }
 
   showLoading() {
-    this.content.innerHTML = '<div class="spinner"></div>';
-    this.progressBar.classList.add('loading');
+    if (this.content) {
+      this.content.innerHTML = '<div class="spinner"></div>';
+      if (this.progressBar) {
+        this.progressBar.classList.add('loading');
+      }
+      if (this.statsDiv) {
+        this.statsDiv.classList.add('translating');
+        this.statsDiv.textContent = '正在翻译...';
+      }
+    }
   }
 
   setContent(segments, translations, stats = '') {
+    if (!this.content || !this.progressBar) return;
+
     this.progressBar.classList.remove('loading');
+    if (this.statsDiv) {
+      this.statsDiv.classList.remove('translating');
+    }
     
     // 清空内容
     this.content.innerHTML = '';
@@ -369,13 +621,21 @@ class TranslationPopup {
       this.content.appendChild(segmentDiv);
     });
     
-    // 添加统计信息
-    if (stats) {
-      const statsDiv = document.createElement('div');
-      statsDiv.className = 'translation-stats';
-      statsDiv.textContent = stats;
-      this.content.appendChild(statsDiv);
+    // 更新统计信息
+    if (stats && this.statsDiv) {
+      this.statsDiv.textContent = stats;
+      this.statsDiv.style.display = 'flex';
+    } else if (this.statsDiv) {
+      this.statsDiv.style.display = 'none';
     }
+
+    // 确保内容区域可以滚动
+    requestAnimationFrame(() => {
+      const scrollContainer = this.popup.querySelector('.scroll-container');
+      if (scrollContainer) {
+        scrollContainer.style.overflowY = 'auto';
+      }
+    });
   }
 }
 
@@ -694,6 +954,12 @@ function debounce(func, wait) {
 async function handleTextSelection(e) {
   const selectedText = window.getSelection().toString().trim();
   if (!selectedText || !TextUtils.isEnglishText(selectedText)) {
+    return;
+  }
+
+  // 检查选中的文本是否在翻译弹窗内
+  const isInsidePopup = e.target.closest('#quick-translator-container');
+  if (isInsidePopup) {
     return;
   }
 
